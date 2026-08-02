@@ -12,12 +12,6 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      with:
-        submodules: recursive
-
-    - name: Install dependencies
-      run: |
-        brew install cmake ninja
 
     - name: Clone ImGui
       run: |
@@ -25,34 +19,44 @@ jobs:
           git clone https://github.com/ocornut/imgui.git ImGui
         fi
 
-    - name: Clone ios-cmake toolchain
-      run: |
-        if [ ! -d "ios-cmake" ]; then
-          git clone https://github.com/leetal/ios-cmake.git ios-cmake
-        fi
+    - name: Install CMake
+      run: brew install cmake
 
     - name: Create build directory
       run: mkdir -p build
 
-    - name: Configure with CMake
+    - name: Generate Xcode project
       run: |
         cd build
-        cmake .. \
-          -DCMAKE_TOOLCHAIN_FILE=../ios-cmake/ios.toolchain.cmake \
-          -DPLATFORM=OS64 \
-          -DDEPLOYMENT_TARGET=12.0 \
-          -DCMAKE_BUILD_TYPE=Release \
-          -G Ninja
+        cmake .. -G Xcode \
+          -DCMAKE_SYSTEM_NAME=iOS \
+          -DCMAKE_OSX_SYSROOT=iphoneos \
+          -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 \
+          -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED=NO \
+          -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED=NO \
+          -DCMAKE_CXX_STANDARD=17 \
+          -DCMAKE_CXX_STANDARD_REQUIRED=ON
 
-    - name: Build with Ninja
+    - name: Build with Xcode
       run: |
         cd build
-        ninja
+        xcodebuild \
+          -project Standoff2ESP.xcodeproj \
+          -scheme Standoff2ESP \
+          -configuration Release \
+          -sdk iphoneos \
+          -arch arm64 \
+          CODE_SIGN_IDENTITY="" \
+          CODE_SIGNING_REQUIRED=NO \
+          CODE_SIGNING_ALLOWED=NO \
+          CLANG_CXX_LANGUAGE_STANDARD="c++17" \
+          CLANG_CXX_LIBRARY="libc++"
 
-    - name: Collect artifacts
+    - name: Find and copy .dylib
       run: |
         mkdir -p output
-        find build -name "*.dylib" -exec cp {} output/ \;
+        find . -name "*.dylib" -exec cp {} output/ \;
+        ls -la output/
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
