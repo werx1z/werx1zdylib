@@ -1,17 +1,17 @@
-# .github/workflows/build.yml
 name: Build Standoff2 ESP for iOS
 
 on:
   push:
     branches: [ main, master ]
-  workflow_dispatch:  # Ручной запуск
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: macos-latest
+    
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4  # Рекомендую тоже обновить checkout до v4
+      uses: actions/checkout@v4
       with:
         submodules: recursive
 
@@ -19,16 +19,19 @@ jobs:
       run: |
         brew install cmake ninja
 
-    - name: Clone ImGui (if missing)
+    - name: Clone ImGui
       run: |
         if [ ! -d "ImGui" ]; then
           git clone https://github.com/ocornut/imgui.git ImGui
         fi
 
-    - name: Create build directory
-      run: mkdir -p build
+    - name: Clone ios-cmake toolchain
+      run: |
+        if [ ! -d "ios-cmake" ]; then
+          git clone https://github.com/leetal/ios-cmake.git ios-cmake
+        fi
 
-    - name: Configure and Build with CMake
+    - name: Configure with CMake
       run: |
         cd build
         cmake .. \
@@ -37,22 +40,17 @@ jobs:
           -DIOS_DEPLOYMENT_TARGET=12.0 \
           -DCMAKE_BUILD_TYPE=Release \
           -G Ninja
-        ninja
-      continue-on-error: true  # Если нет ios-cmake, попробуем Xcode
 
-    - name: Fallback Build with Xcode
-      if: failure()
+    - name: Build with Ninja
       run: |
         cd build
-        cmake .. -G Xcode -DCMAKE_OSX_SYSROOT=iphoneos
-        xcodebuild -project Standoff2ESP.xcodeproj -scheme Standoff2ESP -configuration Release -sdk iphoneos -arch arm64
+        ninja
 
     - name: Collect artifacts
       run: |
         mkdir -p output
         find build -name "*.dylib" -exec cp {} output/ \;
 
-    # ✅ ИСПРАВЛЕНО: используем v4 вместо v3
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
