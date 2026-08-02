@@ -1,4 +1,4 @@
-name: Build iOS with Makefile
+name: Build iOS Direct
 
 on:
   push:
@@ -10,7 +10,7 @@ jobs:
     runs-on: macos-latest
     
     steps:
-    - name: Checkout code
+    - name: Checkout
       uses: actions/checkout@v4
 
     - name: Clone ImGui
@@ -18,24 +18,30 @@ jobs:
         if [ ! -d "ImGui" ]; then
           git clone https://github.com/ocornut/imgui.git ImGui
         fi
-        # Копируем файлы ImGui в корень (для удобства)
-        cp ImGui/*.h . || true
-        cp ImGui/*.cpp . || true
 
-    - name: Build with Make
+    - name: Create imconfig.h
       run: |
-        SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
-        echo "Using SDK: $SDK_PATH"
-        
-        # Список всех .cpp и .mm файлов
-        IMGUI_SRC="ImGui/imgui.cpp ImGui/imgui_draw.cpp ImGui/imgui_widgets.cpp ImGui/imgui_tables.cpp"
-        IMGUI_BACKEND="ImGui/backends/imgui_impl_metal.mm"
-        CORE_SRC="Core/Memory.cpp Core/ESP.cpp Core/SilentAim.cpp Core/HookManager.cpp Core/Renderer.mm"
-        UI_SRC="UI/Menu.cpp UI/Watermark.cpp UI/GestureManager.mm"
-        MAIN_SRC="main.mm"
+        # Создаём imconfig.h в папке ImGui (если его нет)
+        if [ ! -f "ImGui/imconfig.h" ]; then
+          cat > ImGui/imconfig.h << 'EOF'
+        //-----------------------------------------------------------------------------
+        // COMPILE-TIME OPTIONS FOR DEAR IMGUI
+        // See docs for details: https://github.com/ocornut/imgui/blob/master/docs/FAQ.md
+        //-----------------------------------------------------------------------------
+        #pragma once
+        #define IMGUI_DISABLE_OBSOLETE_FUNCTIONS 1
+        #define IMGUI_DISABLE_DEMO_WINDOWS 1
+        #define IMGUI_DISABLE_METRICS_WINDOW 1
+        EOF
+        fi
+
+    - name: Build
+      run: |
+        SDK=$(xcrun --sdk iphoneos --show-sdk-path)
+        echo "Using SDK: $SDK"
         
         clang++ \
-          -isysroot $SDK_PATH \
+          -isysroot $SDK \
           -arch arm64 \
           -miphoneos-version-min=12.0 \
           -fobjc-arc \
@@ -46,11 +52,13 @@ jobs:
           -IImGui/backends \
           -ICore \
           -IUI \
-          $IMGUI_SRC \
-          $IMGUI_BACKEND \
-          $CORE_SRC \
-          $UI_SRC \
-          $MAIN_SRC \
+          ImGui/*.cpp \
+          ImGui/backends/imgui_impl_metal.mm \
+          Core/*.cpp \
+          Core/*.mm \
+          UI/*.cpp \
+          UI/*.mm \
+          main.mm \
           -dynamiclib \
           -undefined dynamic_lookup \
           -framework Foundation \
@@ -62,7 +70,7 @@ jobs:
           -framework CoreFoundation \
           -o libStandoff2ESP.dylib
 
-    - name: Upload artifact
+    - name: Upload
       uses: actions/upload-artifact@v4
       with:
         name: Standoff2ESP
