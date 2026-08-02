@@ -1,4 +1,4 @@
-name: Build Standoff2 ESP for iOS
+name: Build iOS with Makefile
 
 on:
   push:
@@ -18,58 +18,53 @@ jobs:
         if [ ! -d "ImGui" ]; then
           git clone https://github.com/ocornut/imgui.git ImGui
         fi
+        # Копируем файлы ImGui в корень (для удобства)
+        cp ImGui/*.h . || true
+        cp ImGui/*.cpp . || true
 
-    - name: Fix ImGui configuration
+    - name: Build with Make
       run: |
-        # Создаём минимальный imconfig.h если его нет
-        if [ ! -f "ImGui/imconfig.h" ]; then
-          echo "#pragma once" > ImGui/imconfig.h
-          echo "// Custom configuration for iOS" >> ImGui/imconfig.h
-        fi
-
-    - name: Install CMake
-      run: brew install cmake
-
-    - name: Create build directory
-      run: mkdir -p build
-
-    - name: Generate Xcode project
-      run: |
-        cd build
-        cmake .. -G Xcode \
-          -DCMAKE_SYSTEM_NAME=iOS \
-          -DCMAKE_OSX_SYSROOT=iphoneos \
-          -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 \
-          -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED=NO \
-          -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED=NO \
-          -DCMAKE_CXX_STANDARD=17 \
-          -DCMAKE_CXX_STANDARD_REQUIRED=ON
-
-    - name: Build with Xcode
-      run: |
-        cd build
-        xcodebuild \
-          -project Standoff2ESP.xcodeproj \
-          -scheme Standoff2ESP \
-          -configuration Release \
-          -sdk iphoneos \
+        SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
+        echo "Using SDK: $SDK_PATH"
+        
+        # Список всех .cpp и .mm файлов
+        IMGUI_SRC="ImGui/imgui.cpp ImGui/imgui_draw.cpp ImGui/imgui_widgets.cpp ImGui/imgui_tables.cpp"
+        IMGUI_BACKEND="ImGui/backends/imgui_impl_metal.mm"
+        CORE_SRC="Core/Memory.cpp Core/ESP.cpp Core/SilentAim.cpp Core/HookManager.cpp Core/Renderer.mm"
+        UI_SRC="UI/Menu.cpp UI/Watermark.cpp UI/GestureManager.mm"
+        MAIN_SRC="main.mm"
+        
+        clang++ \
+          -isysroot $SDK_PATH \
           -arch arm64 \
-          CODE_SIGN_IDENTITY="" \
-          CODE_SIGNING_REQUIRED=NO \
-          CODE_SIGNING_ALLOWED=NO \
-          CLANG_CXX_LANGUAGE_STANDARD="c++17" \
-          CLANG_CXX_LIBRARY="libc++" \
-          HEADER_SEARCH_PATHS="$(SRCROOT)/../ImGui $(SRCROOT)/../ImGui/backends"
-
-    - name: Find and copy .dylib
-      run: |
-        mkdir -p output
-        find . -name "*.dylib" -exec cp {} output/ \;
-        ls -la output/
+          -miphoneos-version-min=12.0 \
+          -fobjc-arc \
+          -std=c++17 \
+          -O2 \
+          -I. \
+          -IImGui \
+          -IImGui/backends \
+          -ICore \
+          -IUI \
+          $IMGUI_SRC \
+          $IMGUI_BACKEND \
+          $CORE_SRC \
+          $UI_SRC \
+          $MAIN_SRC \
+          -dynamiclib \
+          -undefined dynamic_lookup \
+          -framework Foundation \
+          -framework UIKit \
+          -framework Metal \
+          -framework QuartzCore \
+          -framework CoreGraphics \
+          -framework IOKit \
+          -framework CoreFoundation \
+          -o libStandoff2ESP.dylib
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
         name: Standoff2ESP
-        path: output/
+        path: libStandoff2ESP.dylib
         retention-days: 7
