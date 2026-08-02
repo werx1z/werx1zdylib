@@ -4,44 +4,31 @@ name: Build Standoff2 ESP for iOS
 on:
   push:
     branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
-  workflow_dispatch:           # Ручной запуск
+  workflow_dispatch:  # Ручной запуск
 
 jobs:
   build:
-    runs-on: macos-latest      # Бесплатный macOS-раннер
-    
+    runs-on: macos-latest
     steps:
-    # 1. Проверяем код
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4  # Рекомендую тоже обновить checkout до v4
       with:
-        submodules: recursive   # Если ImGui — подмодуль
-    
-    # 2. Устанавливаем зависимости
+        submodules: recursive
+
     - name: Install dependencies
       run: |
-        brew install cmake
-        brew install ninja
-        echo "✅ Dependencies installed"
-    
-    # 3. Клонируем ImGui (если нет в репозитории)
-    - name: Clone ImGui
+        brew install cmake ninja
+
+    - name: Clone ImGui (if missing)
       run: |
         if [ ! -d "ImGui" ]; then
           git clone https://github.com/ocornut/imgui.git ImGui
-          echo "✅ ImGui cloned"
-        else
-          echo "✅ ImGui already exists"
         fi
-    
-    # 4. Создаём папку сборки
+
     - name: Create build directory
       run: mkdir -p build
-    
-    # 5. Генерируем CMake проект
-    - name: Configure CMake
+
+    - name: Configure and Build with CMake
       run: |
         cd build
         cmake .. \
@@ -50,35 +37,24 @@ jobs:
           -DIOS_DEPLOYMENT_TARGET=12.0 \
           -DCMAKE_BUILD_TYPE=Release \
           -G Ninja
-      continue-on-error: true  # Если ios-cmake нет — попробуем без него
-    
-    # 6. Альтернативная сборка (если нет ios-cmake)
-    - name: Build with Xcode (fallback)
+        ninja
+      continue-on-error: true  # Если нет ios-cmake, попробуем Xcode
+
+    - name: Fallback Build with Xcode
       if: failure()
       run: |
         cd build
-        cmake .. -G Xcode -DIOS=1 -DCMAKE_OSX_SYSROOT=iphoneos
+        cmake .. -G Xcode -DCMAKE_OSX_SYSROOT=iphoneos
         xcodebuild -project Standoff2ESP.xcodeproj -scheme Standoff2ESP -configuration Release -sdk iphoneos -arch arm64
-        echo "✅ Build with Xcode completed"
-    
-    # 7. Сборка через Ninja (если ios-cmake есть)
-    - name: Build with Ninja
-      run: |
-        cd build
-        ninja
-      continue-on-error: true
-    
-    # 8. Копируем результат в отдельную папку
+
     - name: Collect artifacts
       run: |
         mkdir -p output
         find build -name "*.dylib" -exec cp {} output/ \;
-        find build -name "*.so" -exec cp {} output/ \;
-        echo "✅ Artifacts collected"
-    
-    # 9. Загружаем артефакт
+
+    # ✅ ИСПРАВЛЕНО: используем v4 вместо v3
     - name: Upload artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: Standoff2ESP
         path: output/
