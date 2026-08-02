@@ -19,6 +19,14 @@ jobs:
           git clone https://github.com/ocornut/imgui.git ImGui
         fi
 
+    - name: Fix ImGui configuration
+      run: |
+        # Создаём минимальный imconfig.h если его нет
+        if [ ! -f "ImGui/imconfig.h" ]; then
+          echo "#pragma once" > ImGui/imconfig.h
+          echo "// Custom configuration for iOS" >> ImGui/imconfig.h
+        fi
+
     - name: Install CMake
       run: brew install cmake
 
@@ -50,7 +58,8 @@ jobs:
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGNING_ALLOWED=NO \
           CLANG_CXX_LANGUAGE_STANDARD="c++17" \
-          CLANG_CXX_LIBRARY="libc++"
+          CLANG_CXX_LIBRARY="libc++" \
+          HEADER_SEARCH_PATHS="$(SRCROOT)/../ImGui $(SRCROOT)/../ImGui/backends"
 
     - name: Find and copy .dylib
       run: |
